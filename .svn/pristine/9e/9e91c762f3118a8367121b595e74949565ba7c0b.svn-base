@@ -1,0 +1,449 @@
+실습환경 구성
+ - lab205-mybatis 프로젝트 import
+ - maven repository 설정 및 dependency library 맞춤 
+ 	.org.egovframe.rte.psl.dataaccess Dependency Hierarchy 확인
+ 	/**************************************************************************************/
+ 	mybatis : 3.5.10 / mybatis-spring : 2.0.7
+ 	/**************************************************************************************/
+
+===================================================================
+Step 1. 기본 환경 설정 
+
+ 1) Hsqldb 초기화 스크립트 -- (확인)
+ 
+	. /lab205-mybatis/src/test/resources/META-INF/testdata/sample_schema_hsql.sql 를 확인한다.
+	현 실습 프로젝트에서는 편의상 매 테스트 케이스 재실행 시 관련 table 을 drop/create 하고 있음.
+	
+	
+ *2) DataSource 설정
+ 
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-datasource.xml
+	/**************************************************************************************/
+	<!-- TODO [Step 1-2] DataSource 설정 확인 -->
+	<bean id="dataSource" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+		<property name="driverClassName" value="${db.driver}" />
+		<property name="url" value="${db.dburl}" />
+		<property name="username" value="${db.username}" />
+		<property name="password" value="${db.password}" />
+		<property name="defaultAutoCommit" value="false" />
+		<property name="poolPreparedStatements" value="true" />
+	</bean>
+	/**************************************************************************************/
+
+참고) 또다른 DataSource 설정  -- (확인)
+
+	.메모리DB를 사용하는 경우에는 다음과 같이 dataSource를 설정할 수 있다.
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-datasource.xml
+	/**************************************************************************************/
+	<!-- [Step 1-2] DataSource 설정 --> 
+	<jdbc:embedded-database id="dataSource" type="HSQL">
+		<jdbc:script location= "META-INF/testdata/sample_schema_hsql.sql"/>
+	</jdbc:embedded-database>
+	/**************************************************************************************/
+	
+	.context:property-placeholder는 위와 같이 ${property} 값을 바인딩하기 위한 설정이다.
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-common.xml
+	/**************************************************************************************/
+	<!-- dataSource property를 위한 PropertyPlaceholderConfigurer 설정 -->
+	<context:property-placeholder location="classpath:/META-INF/spring/jdbc.properties" />
+	/**************************************************************************************/
+	
+	.property-placeholder가 참조하는 properties 파일을 정의한다.
+	. /lab205-mybatis/src/test/resources/META-INF/spring/jdbc.properties
+	/**************************************************************************************/
+	db.driver=org.hsqldb.jdbcDriver
+	#db.dburl=jdbc:hsqldb:mem:testdb
+	db.dburl=jdbc:hsqldb:hsql://localhost/sampledb
+	db.username=sa
+	db.password=
+	/**************************************************************************************/
+
+
+ *3) Transaction 설정
+
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-transaction.xml
+	/**************************************************************************************/
+	<!-- TODO [Step 1-3] Transaction 설정 -->
+	
+	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+	  <property name="dataSource" ref="dataSource"/>
+	</bean>
+	<tx:annotation-driven transaction-manager="txManager" />
+	/**************************************************************************************/
+	.cf1.) 여기서는 transaction manager 만을 설정하였고, TestCase 내에서 전역 @Transactional 설정으로 트랜잭션을 일괄 지정하고 있으나 
+	보통 AOP 형식(tx:aop)의 트랜잭션 대상 지정으로 비즈니스 서비스의 메서드에 일괄 지정하는 경우가 많다. 
+	.cf2.) @Transactional Annotation 으로 대상 메서드에 개별로 따로 지정할 수도 있다.
+
+
+ *4) MyBatis와 Spring 연동 설정
+ 
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-mybatis.xml
+	/**************************************************************************************/
+	<!-- SqlSession setup for MyBatis Database Layer -->
+	<!-- TODO [Step 1-4] MyBaits와 Spring 연동 설정 -->
+	
+	<bean id="sqlSession" class="org.mybatis.spring.SqlSessionFactoryBean">
+	    <property name="dataSource" ref="dataSource" />	    
+		<property name="configLocation" value="classpath:/META-INF/sqlmap/sql-mybatis-config.xml" />
+		<!-- <property name="mapperLocations" value="classpath:**/lab-*.xml" /> -->
+	</bean>
+	/**************************************************************************************/
+	. sql-mybatis-config.xml 내에서 개별적인 Mapper XML 파일을 수동으로 설정할 수 있지만, 
+	SqlSessionFactoryBean 정의 시에 mapperLocations 속성을 사용하면 Spring 의 ResourceLoader 형식으로 패턴 매칭에 의거한 일괄 처리된다.
+
+
+ *5) MyBatis Configuration File 작성
+	. /lab205-mybatis/src/test/resources/META-INF/sqlmap/sql-mybatis-config.xml
+	/**************************************************************************************/
+	<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN" "http://mybatis.org/dtd/mybatis-3-config.dtd">
+	<configuration> 
+	<!-- TODO [Step 1-5] MyBatis Configuration File 작성  -->
+
+		<typeAliases>
+			<typeAlias alias="empVO" type="egovframework.lab.dataaccess.service.EmpVO" />
+		</typeAliases>
+			
+		<!-- MyBatis 연동을 위한 SqlSessionFactoryBean 정의 시 mapperLocations 속성으로 
+				한 번에 모든 Mapper XML File을 설정할 수 있다.  
+				(<property name="mapperLocations" value="classpath:**/lab-*.xml" /> 추가)
+				단, 아래 <mappers> 설정과 mapperLocations 설정 중 한가지만 선택해야한다.
+		-->
+		<mappers>
+			<mapper resource="META-INF/sqlmap/mappers/lab-dao-class.xml" />
+			<mapper resource="META-INF/sqlmap/mappers/lab-mapper-interface.xml" />
+		</mappers>
+		
+	</configuration>
+	/**************************************************************************************/
+
+
+ 6) IDGeneration Service 설정 확인
+ 
+ 	.EgovSequenceIdGnrService을 이용하여 비즈니스 로직에서 필요한 primary key를 생성한다. 
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-idgen.xml
+	/**************************************************************************************/
+	<bean name="primaryTypeSequenceIds"
+		class="org.egovframe.rte.fdl.idgnr.impl.EgovSequenceIdGnrService"
+		destroy-method="destroy">
+		<property name="dataSource" ref="dataSource" />
+		<property name="query" value="SELECT NEXT VALUE FOR empseq FROM DUAL" />
+	</bean>
+	/**************************************************************************************/
+	. 여기서는 Hsqldb 를 사용하여 Oracle 의 DUAL 테이블 역할을 할 수 있도록 초기화 스크립트 sql 에 create 하였으며, 
+	DB Sequence 기반의 Id Generation 을 사용한 예이다. (위에서 select next value for seq_id from xx 는 Hsqldb 의 특화된 sequence 사용 문법임에 유의!)
+
+ 	
+ 7) 공통 설정 확인
+ 
+ 	.나머지 아래 설정들을 확인한다.
+	. /lab205-dataaccess/src/test/resources/META-INF/spring/context-common.xml
+	/**************************************************************************************/
+		<!-- PropertyPlaceholderConfigurer 설정 -->
+		..
+		<!-- MessageSource 설정 -->
+		..
+		<!-- 전자정부 TraceHandler 설정 관련 -->
+		..
+	/**************************************************************************************/
+	. 외부 properties 파일을 Container 구동 시 미리 Spring Bean 설정 파일의 속성값으로 대체하여 처리해주는 PropertyPlaceholderConfigurer 설정
+	. Locale 에 따른 다국어 처리를 쉽게 해주는 messageSource 설정. 여기서는 전자정부 실행환경의 id generation 서비스와 properties 서비스의 메시지 파일과 업무 어플리케이션을 위한 사용자 메시지(/message/message-common - message-common_en_US.properties, message-common_ko_KR.properties 를 확인할 것) 를 지정하였다.
+	. exception 처리 Handler 와 유사하게 특정한 상황에서 사용자가 Trace Handler 를 지정하여 사용할 수 있도록 전자정부 프레임워크에서 가이드하고 있는 TraceHandler 설정
+
+ 
+ 8) AOP 설정 확인
+ 
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-aspect.xml 를 작성한다.
+	/**************************************************************************************/
+	<aop:config>
+		<aop:pointcut id="serviceMethod"
+			expression="execution(* egovframework.lab..impl.*Impl.*(..))" />
+
+		<aop:aspect ref="exceptionTransfer">
+			<aop:after-throwing throwing="exception"
+				pointcut-ref="serviceMethod" method="transfer" />
+		</aop:aspect>
+	</aop:config>
+
+	<bean id="exceptionTransfer" class="org.egovframe.rte.fdl.cmmn.aspect.ExceptionTransfer">
+		<property name="exceptionHandlerService">
+			<list>
+				<ref bean="defaultExceptionHandleManager" />
+			</list>
+		</property>
+	</bean>
+	/**************************************************************************************/
+	. Spring AOP(xml 설정 방식) 를 사용하여 비지니스 메서드에서 exception 이 발생한 경우 
+	일괄적으로 ExceptionTransfer 의 transfer 메서드 기능(Advice) 를 수행해 주게 됨. -
+	-> Exception logging 및 BizException 형태로 wrapping 하여 재처리하는 Exception 공통처리 후 
+	ExceptionHandleManager 에 의해 관리(설정) 되는 Handler (ex. exception 내용을 메일링 한더던지.. 사용자 구현 가능) 가 자동적으로 추가 수행될 수 있음.
+ 
+ 
+===================================================================
+ Step 2. (선택1) MyBatis 활용을 자바클래스 작성 - 일반적인 DAO 클래스 작성
+ 
+ 1) Annotation을 적용한 EmpServiceImpl 작성
+
+	. /lab205-mybatis/src/main/java/egovframework/lab/dataaccess/service/impl/EmpServiceImpl.java
+	/**************************************************************************************/
+	@Service("empService")
+	public class EmpServiceImpl extends EgovAbstractServiceImpl implements EmpService {
+		
+		// TODO [Step 2-1] EmpServiceImpl 추가 작성
+	
+	    @Resource(name = "empDAO")
+	    public EmpDAO empDAO;
+			     
+		// TODO [Step 4-2] EmpServiceImpl 변경 후 다시 테스트
+	    //EmpMapper를 사용하도록 주석 변경
+	    
+	    // @Resource(name = "empMapper")
+	    // EmpMapper empDAO;
+	/**************************************************************************************/
+	
+	
+ 2) EgovAbstractMapper를 상속한 DAO클래스 작성
+ 
+	. /lab205-mybatis/src/main/java/egovframework/lab/dataaccess/service/impl/EmpDAO.java
+	/**************************************************************************************/	
+	@Repository("empDAO")
+	public class EmpDAO extends EgovAbstractMapper {
+		
+		// TODO [Step 2-2] EmpDAO 작성
+	
+	    public void insertEmp(EmpVO vo) {
+	        insert("Emp.insertEmp", vo);
+	    }
+	
+	    public int updateEmp(EmpVO vo) {
+	        return update("Emp.updateEmp", vo);
+	    }
+	
+	    public int deleteEmp(EmpVO vo) {
+	        return delete("Emp.deleteEmp", vo);
+	    }
+	
+	    public EmpVO selectEmp(EmpVO vo) {
+	        return (EmpVO) selectByPk("Emp.selectEmp", vo);
+	    }
+	
+	    @SuppressWarnings("unchecked")
+	    public List<EmpVO> selectEmpList(EmpVO searchVO) {
+	        return (List<EmpVO>) list("Emp.selectEmpList", searchVO);
+	    }
+	/**************************************************************************************/
+
+3)  lab-dao-class.xml 
+	.EgovAbstractMapper 상속한 DAO 클래스 사용 시 MyBatis SQL statement, Dynamic SQL <if>를 테스트하고 있음
+	./lab205-mybatis/src/test/resources/META-INF/sqlmap/mappers/lab-dao-class.xml
+	/**************************************************************************************/
+	<resultMap id="empResult" type="empVO">
+		<id property="empNo" column="EMP_NO" />
+		<result property="empName" column="EMP_NAME" />
+		<result property="job" column="JOB" />
+		<result property="mgr" column="MGR" />
+		<result property="hireDate" column="HIRE_DATE" />
+		<result property="sal" column="SAL" />
+		<result property="comm" column="COMM" />
+		<result property="deptNo" column="DEPT_NO" />
+	</resultMap>
+
+	<insert id="insertEmp" parameterType="empVO">
+		<![CDATA[
+			insert into EMP (
+				EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			) values (
+				#{empNo}, #{empName}, #{job}, #{mgr}, #{hireDate}, #{sal}, #{comm}, #{deptNo}
+			)
+		]]>
+	</insert>
+
+	<update id="updateEmp" parameterType="empVO">
+		<![CDATA[
+			update EMP
+			set
+				EMP_NAME = #{empName},
+				JOB = #{job},
+				MGR = #{mgr},
+				HIRE_DATE = #{hireDate},
+				SAL = #{sal},
+				COMM = #{comm},
+				DEPT_NO = #{deptNo}
+			where
+				EMP_NO = #{empNo}
+		]]>
+	</update>
+
+	<delete id="deleteEmp" parameterType="empVO">
+		<![CDATA[
+			delete from EMP
+			where EMP_NO = #{empNo}
+		]]>
+	</delete>
+
+	<select id="selectEmp" parameterType="empVO" resultMap="empResult">
+		<![CDATA[
+			select EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			from EMP
+			where EMP_NO = #{empNo}
+		]]>
+	</select>
+
+	<select id="selectEmpList" parameterType="empVO" resultMap="empResult">
+		<![CDATA[
+			select EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			from EMP	
+			where 1 = 1
+		]]>
+
+		<if test="empNo != null">
+			AND EMP_NO = #{empNo}
+		</if>
+
+		<if test="empName != null">
+			AND EMP_NAME LIKE '%' || #{empName} || '%'
+		</if>
+	</select>
+	/**************************************************************************************/
+
+
+===================================================================
+ Step 3. (선택2) MyBatis 활용을 위한 자바클래스 작성 - Mapper Interface 작성
+
+ 1) Annotation을 적용한 EmpServiceImpl 작성
+
+	. /lab205-mybatis/src/main/java/egovframework/lab/dataaccess/service/impl/EmpServiceImpl.java
+	/**************************************************************************************/
+	@Service("empService")
+	public class EmpServiceImpl extends EgovAbstractServiceImpl implements EmpService {
+		
+	// TODO [Step 2-1] EmpServiceImpl 추가 작성
+	
+    @Resource(name = "empDAO")
+    public EmpDAO empDAO;
+	     
+	// TODO [Step 4-2] EmpServiceImpl의 주석 EmpMapper -> EmpDAO로 변경 후 다시 테스트
+    
+    // TODO [Step 3-1] EmpServiceImpl 변경
+    //EmpMapper를 사용하도록 주석 변경
+    // @Resource(name = "empMapper")
+    // EmpMapper empDAO;
+    
+	/**************************************************************************************/
+	
+		
+ 2) EmpMapper 인터페이스 작성 
+
+	. /lab205-mybatis/src/main/java/egovframework/lab/dataaccess/service/impl/EmpMapper.java
+	/**************************************************************************************/
+	@Mapper("empMapper")
+	public interface EmpMapper {
+ 
+    	// TODO [Step 2-3] EmpMapper 작성 (Mapper Interface) 
+
+	    public void insertEmp(EmpVO vo);
+	 
+	    public int updateEmp(EmpVO vo);
+	 
+	    public int deleteEmp(EmpVO vo);
+	 
+	    public EmpVO selectEmp(EmpVO vo);
+	 
+	    public List<EmpVO> selectEmpList(EmpVO searchVO);
+	
+	}
+
+	/**************************************************************************************/
+	
+ 	
+ 3) MyBatis의 Mapper Interface 자동스캔 설정
+	.표준프레임워크 기반에서 Mapper Interface 방식으로 개발 시에 @Mapper 어노테이션을 자동스캔하기 위해 필요하다.
+	. /lab205-mybatis/src/test/resources/META-INF/spring/context-mybatis.xml 
+	/**************************************************************************************/
+	<!-- MapperConfigurer setup for @Mapper -->
+	<!-- TODO [Step 2-3] MyBatis의 Mapper Interface 자동스캔 설정 -->
+	
+	<bean class="org.egovframe.rte.psl.dataaccess.mapper.MapperConfigurer">
+		<property name="basePackage" value="egovframework.lab.dataaccess.service.impl" />
+	</bean>	
+	/**************************************************************************************/
+
+
+ 4)  lab-mapper-interface.xml
+	. Mapper Interface로 작성 시 MyBatis SQL statement, Dynamic SQL <if>를 테스트하고 있음
+	. /lab205-mybatis/src/test/resources/META-INF/sqlmap/mappers/lab-mapper-interface.xml 
+	/**************************************************************************************/
+	<resultMap id="empResult" type="empVO">
+		<id property="empNo" column="EMP_NO" />
+		<result property="empName" column="EMP_NAME" />
+		<result property="job" column="JOB" />
+		<result property="mgr" column="MGR" />
+		<result property="hireDate" column="HIRE_DATE" />
+		<result property="sal" column="SAL" />
+		<result property="comm" column="COMM" />
+		<result property="deptNo" column="DEPT_NO" />
+	</resultMap>
+
+	<insert id="insertEmp" parameterType="empVO">
+		<![CDATA[
+			insert into EMP (
+				EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			) values (
+				#{empNo}, #{empName}, #{job}, #{mgr}, #{hireDate}, #{sal}, #{comm}, #{deptNo}
+			)
+		]]>
+	</insert>
+
+	<update id="updateEmp" parameterType="empVO">
+		<![CDATA[
+			update EMP
+			set
+				EMP_NAME = #{empName},
+				JOB = #{job},
+				MGR = #{mgr},
+				HIRE_DATE = #{hireDate},
+				SAL = #{sal},
+				COMM = #{comm},
+				DEPT_NO = #{deptNo}
+			where
+				EMP_NO = #{empNo}
+		]]>
+	</update>
+
+	<delete id="deleteEmp" parameterType="empVO">
+		<![CDATA[
+			delete from EMP
+			where EMP_NO = #{empNo}
+		]]>
+	</delete>
+
+	<select id="selectEmp" parameterType="empVO" resultMap="empResult">
+		<![CDATA[
+			select EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			from EMP
+			where EMP_NO = #{empNo}
+		]]>
+	</select>
+
+	<select id="selectEmpList" parameterType="empVO" resultMap="empResult">
+		<![CDATA[
+			select EMP_NO, EMP_NAME, JOB, MGR, HIRE_DATE, SAL, COMM, DEPT_NO
+			from EMP	
+			where 1 = 1
+		]]>
+
+		<if test="empNo != null">
+			AND EMP_NO = #{empNo}
+		</if>
+
+		<if test="empName != null">
+			AND EMP_NAME LIKE '%' || #{empName} || '%'
+		</if>
+	</select>
+	/**************************************************************************************/
+
+===================================================================
+ Step 4. EmpServiceTest 확인 
+ 
+  1) EmpServiceTest 실행
+  2) EmpServiceImpl의 주석을 EmpMapper 에서 EmpDAO로 변경 후 다시 테스트
